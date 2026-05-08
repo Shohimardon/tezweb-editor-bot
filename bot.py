@@ -1,7 +1,6 @@
 """
 TezWeb Matn Tahrirlovchi Bot
-Guruhda teg qilib matn yuboring - bot grammatikani tuzatadi
-Sof requests bilan ishlaydi - python-telegram-bot kerak emas
+Guruhda /tahrir yoki teg qilib matn yuboring
 """
 
 import os
@@ -20,39 +19,40 @@ ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API           = f"https://api.telegram.org/bot{BOT_TOKEN}"
 OFFSET_FILE   = "offset.txt"
 
-SYSTEM_PROMPT = """Sen o'zbek tili grammatika ekspertisan. Foydalanuvchi matn yuborsa:
+SYSTEM_PROMPT = """Sen o'zbek tili grammatika ekspertisan.
 
+Foydalanuvchi matn yuborsa:
 1. Matnni grammatik jihatdan to'g'irla
 2. Imlo xatolarini tuzat
 3. Tinish belgilarini to'g'irla
 4. 5 xil uslubda qayta yoz
 
-Javobni aniq quyidagi formatda ber:
+Javobni aniq quyidagi formatda ber (markdown ishlatma):
 
-✅ TUZATILGAN MATN:
+TUZATILGAN MATN:
 [tuzatilgan matn]
 
-📝 XATOLAR:
-[qanday xatolar bor edi]
+XATOLAR:
+[qanday xatolar bor edi, qisqacha]
 
 5 VARIANT:
 
-1 Rasmiy uslub:
+1. Rasmiy uslub:
 [matn]
 
-2 Oddiy uslub:
+2. Oddiy uslub:
 [matn]
 
-3 Ijodiy uslub:
+3. Ijodiy uslub:
 [matn]
 
-4 Qisqa uslub:
+4. Qisqa uslub:
 [matn]
 
-5 Professional uslub:
+5. Professional uslub:
 [matn]
 
-Faqat o'zbek tilida javob ber. Markdown formatlashtirish ishlatma."""
+Faqat o'zbek tilida javob ber."""
 
 
 def get_offset():
@@ -61,43 +61,34 @@ def get_offset():
     except Exception:
         return 0
 
-def save_offset(offset):
-    Path(OFFSET_FILE).write_text(str(offset))
+def save_offset(o):
+    Path(OFFSET_FILE).write_text(str(o))
 
 def tg_send(chat_id, text, reply_to=None):
     try:
-        payload = {
-            "chat_id": chat_id,
-            "text": text[:4096],
-            "disable_web_page_preview": True,
-        }
+        payload = {"chat_id": chat_id, "text": text[:4096], "disable_web_page_preview": True}
         if reply_to:
             payload["reply_to_message_id"] = reply_to
         r = requests.post(f"{API}/sendMessage", json=payload, timeout=30)
         return r.json()
     except Exception as e:
         logger.error("sendMessage xatosi: %s", e)
-        return None
 
-def tg_send_with_keyboard(chat_id, text, keyboard):
+def tg_keyboard(chat_id, text, keyboard):
     try:
-        r = requests.post(f"{API}/sendMessage", json={
+        requests.post(f"{API}/sendMessage", json={
             "chat_id": chat_id,
             "text": text[:4096],
             "reply_markup": keyboard,
             "disable_web_page_preview": True,
         }, timeout=30)
-        return r.json()
     except Exception as e:
-        logger.error("sendMessage xatosi: %s", e)
-        return None
+        logger.error("keyboard xatosi: %s", e)
 
 def tg_typing(chat_id):
     try:
-        requests.post(f"{API}/sendChatAction", json={
-            "chat_id": chat_id,
-            "action": "typing"
-        }, timeout=10)
+        requests.post(f"{API}/sendChatAction",
+            json={"chat_id": chat_id, "action": "typing"}, timeout=10)
     except Exception:
         pass
 
@@ -108,7 +99,7 @@ def get_bot_username():
     except Exception:
         return ""
 
-def check_and_edit(text):
+def ai_edit(text):
     client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     msg = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -119,21 +110,13 @@ def check_and_edit(text):
     return msg.content[0].text
 
 def send_start(chat_id, bot_username):
-    keyboard = {
-        "inline_keyboard": [
-            [
-                {"text": "Guruhga qoshish", "url": f"https://t.me/{bot_username}?startgroup=true"},
-            ],
-            [
-                {"text": "Kanalimiz @tezweb_uz", "url": "https://t.me/tezweb_uz"},
-                {"text": "tezweb.uz", "url": "https://tezweb.uz"}
-            ],
-            [
-                {"text": "Yaratuvchi @Shohdollar22", "url": "https://t.me/Shohdollar22"}
-            ]
-        ]
-    }
-    text = (
+    keyboard = {"inline_keyboard": [
+        [{"text": "➕ Guruhga qo'shish", "url": f"https://t.me/{bot_username}?startgroup=true"}],
+        [{"text": "📢 @tezweb_uz", "url": "https://t.me/tezweb_uz"},
+         {"text": "🌐 tezweb.uz", "url": "https://tezweb.uz"}],
+        [{"text": "💬 @Shohdollar22", "url": "https://t.me/Shohdollar22"}],
+    ]}
+    tg_keyboard(chat_id,
         "TezWeb Matn Tahrirlovchi Bot\n\n"
         "Men o'zbek tili grammatikasini tekshiruvchi aqlli botman!\n\n"
         "Nima qila olaman:\n"
@@ -142,24 +125,22 @@ def send_start(chat_id, bot_username):
         "- 5 xil uslubda variant taqdim etaman\n\n"
         "Qanday ishlatish:\n"
         "Shaxsiy xabarda: Matnni yuboring\n"
-        "Guruhda: @botni teg qilib matn yuboring\n\n"
+        "Guruhda: /tahrir [matn] yoki @teg orqali\n\n"
+        "Misol:\n"
+        "/tahrir Men bugun ishga bordim va kop narsalar qildim\n\n"
         "TezWeb.uz botlari:\n"
         "- Matn tahrirlovchi - siz hozir\n"
         "- Antispam boti - @TezWebBot_Antispam\n"
         "- Kontent boti - @tezweb_content_bot\n\n"
-        "Muammo yoki taklif: @Shohdollar22\n"
-        "tezweb.uz | @tezweb_uz"
-    )
-    tg_send_with_keyboard(chat_id, text, keyboard)
+        "tezweb.uz | @tezweb_uz | @Shohdollar22",
+        keyboard)
 
 def send_info(chat_id, bot_username):
-    keyboard = {
-        "inline_keyboard": [
-            [{"text": "Guruhga qoshish", "url": f"https://t.me/{bot_username}?startgroup=true"}],
-            [{"text": "Do'stlarga tavsiya qiling!", "url": f"https://t.me/share/url?url=https://t.me/{bot_username}&text=O'zbek tili grammatikasini tekshiruvchi aqlli bot!"}],
-        ]
-    }
-    text = (
+    keyboard = {"inline_keyboard": [
+        [{"text": "➕ Guruhga qo'shish", "url": f"https://t.me/{bot_username}?startgroup=true"}],
+        [{"text": "Do'stlarga tavsiya", "url": f"https://t.me/share/url?url=https://t.me/{bot_username}&text=O'zbek tili grammatikasini tekshiruvchi aqlli bot!"}],
+    ]}
+    tg_keyboard(chat_id,
         "Bot haqida\n\n"
         "TezWeb Matn Tahrirlovchi Bot\n\n"
         "Texnologiya: Claude AI (Anthropic)\n"
@@ -170,15 +151,44 @@ def send_info(chat_id, bot_username):
         "- O'zbek tili grammatikasini tekshirish\n"
         "- Imlo xatolarini tuzatish\n"
         "- 5 xil uslubda variant berish\n"
+        "- Guruhda /tahrir buyrug'i bilan ishlash\n"
         "- Guruhda teg orqali ishlash\n"
         "- Shaxsiy xabarda ishlash\n\n"
         "Kanal: @tezweb_uz\n"
-        "Bog'lanish: @Shohdollar22"
-    )
-    tg_send_with_keyboard(chat_id, text, keyboard)
+        "Bog'lanish: @Shohdollar22",
+        keyboard)
+
+def process_text(chat_id, text, msg_id):
+    if len(text) < 5:
+        tg_send(chat_id, "Minimal 5 ta belgi kiriting.", reply_to=msg_id)
+        return
+    if len(text) > 3000:
+        tg_send(chat_id, f"Matn juda uzun! Maksimal 3000 belgi. Sizniki: {len(text)}", reply_to=msg_id)
+        return
+
+    tg_typing(chat_id)
+    logger.info("Tekshirilmoqda: %d belgi", len(text))
+
+    try:
+        result = ai_edit(text)
+        footer = "\n\ntezweb.uz | @tezweb_uz | @Shohdollar22"
+
+        if len(result) + len(footer) > 4096:
+            mid = result[:3800].rfind("\n\n")
+            if mid == -1:
+                mid = 3800
+            tg_send(chat_id, result[:mid], reply_to=msg_id)
+            tg_send(chat_id, result[mid:].strip() + footer)
+        else:
+            tg_send(chat_id, result + footer, reply_to=msg_id)
+
+        logger.info("Javob yuborildi")
+    except Exception as e:
+        logger.error("AI xatosi: %s", e)
+        tg_send(chat_id, "Xatolik yuz berdi. Qaytadan urinib ko'ring.\nMuammo: @Shohdollar22", reply_to=msg_id)
 
 def handle_updates():
-    offset     = get_offset()
+    offset = get_offset()
     bot_username = get_bot_username()
     logger.info("Bot username: @%s", bot_username)
 
@@ -187,12 +197,11 @@ def handle_updates():
             r = requests.post(f"{API}/getUpdates", json={
                 "offset": offset,
                 "timeout": 30,
-                "allowed_updates": ["message", "callback_query"]
+                "allowed_updates": ["message"]
             }, timeout=40)
             data = r.json()
 
             if not data.get("ok"):
-                logger.error("getUpdates xato: %s", data)
                 time.sleep(5)
                 continue
 
@@ -200,17 +209,6 @@ def handle_updates():
                 offset = update["update_id"] + 1
                 save_offset(offset)
 
-                # Callback tugmalar
-                callback = update.get("callback_query")
-                if callback:
-                    try:
-                        requests.post(f"{API}/answerCallbackQuery",
-                            json={"callback_query_id": callback["id"]}, timeout=10)
-                    except Exception:
-                        pass
-                    continue
-
-                # Xabar
                 message = update.get("message", {})
                 if not message:
                     continue
@@ -220,75 +218,50 @@ def handle_updates():
                 chat_id   = chat.get("id")
                 chat_type = chat.get("type", "")
                 msg_id    = message.get("message_id")
-                from_user = message.get("from", {})
 
                 if not text or not chat_id:
                     continue
 
-                # Komandalar
-                cmd = text.split()[0].lower().split("@")[0] if text.startswith("/") else ""
+                # Komanda aniqlash
+                parts = text.split()
+                cmd = parts[0].lower().split("@")[0] if text.startswith("/") else ""
 
-                if cmd == "/start" or cmd == "/help":
+                # /start /help
+                if cmd in ("/start", "/help"):
                     send_start(chat_id, bot_username)
                     continue
 
+                # /info
                 if cmd == "/info":
                     send_info(chat_id, bot_username)
                     continue
 
-                # Guruhda faqat teg yoki reply orqali
+                # /tahrir - guruhda ham shaxsiy xabarda ham ishlaydi
+                if cmd == "/tahrir":
+                    tahrir_text = text.replace(parts[0], "", 1).strip()
+                    if not tahrir_text:
+                        tg_send(chat_id,
+                            "Ishlatish: /tahrir [matn]\n\n"
+                            "Misol:\n"
+                            "/tahrir Men bugun ishga bordim va kop narsalar qildim",
+                            reply_to=msg_id)
+                        continue
+                    process_text(chat_id, tahrir_text, msg_id)
+                    continue
+
+                # Guruhda faqat teg yoki reply
                 if chat_type in ("group", "supergroup"):
                     is_mention = bot_username and f"@{bot_username}" in text
                     is_reply   = (message.get("reply_to_message", {})
                                   .get("from", {})
                                   .get("username", "") == bot_username)
-
                     if not is_mention and not is_reply:
                         continue
-
-                    # Teg nomini olib tashlash
                     text = text.replace(f"@{bot_username}", "").strip()
 
-                # Matn tekshirish
-                if not text or len(text) < 5:
-                    tg_send(chat_id,
-                        "Iltimos tekshirilishi kerak bo'lgan matnni yuboring.\n"
-                        "Minimal 5 ta belgi bo'lishi kerak.",
-                        reply_to=msg_id)
-                    continue
-
-                if len(text) > 3000:
-                    tg_send(chat_id,
-                        f"Matn juda uzun! Maksimal 3000 belgi.\n"
-                        f"Sizning matningiz: {len(text)} belgi.",
-                        reply_to=msg_id)
-                    continue
-
-                logger.info("Matn tekshirilmoqda: %d belgi | %s", len(text), from_user.get("username", "?"))
-                tg_typing(chat_id)
-
-                try:
-                    result = check_and_edit(text)
-                    footer = "\n\ntezweb.uz | @tezweb_uz | @Shohdollar22"
-
-                    if len(result) + len(footer) > 4096:
-                        # Ikki qismga bo'lib yuborish
-                        mid = result[:3800].rfind("\n\n")
-                        if mid == -1:
-                            mid = 3800
-                        tg_send(chat_id, result[:mid], reply_to=msg_id)
-                        tg_send(chat_id, result[mid:].strip() + footer)
-                    else:
-                        tg_send(chat_id, result + footer, reply_to=msg_id)
-
-                    logger.info("Javob yuborildi")
-
-                except Exception as e:
-                    logger.error("AI xatosi: %s", e)
-                    tg_send(chat_id,
-                        "Xatolik yuz berdi. Qaytadan urinib ko'ring.\n"
-                        "Muammo davom etsa: @Shohdollar22",
-                        reply_to=msg_id)
+                # Shaxsiy xabar - har qanday matn
+                if chat_type == "private" and not cmd:
+                    process_text(chat_id, text, msg_id)
 
         except Exception as e:
             logger.error("handle_updates xatosi: %s", e)
@@ -307,9 +280,8 @@ def main():
     t = threading.Thread(target=handle_updates, daemon=True)
     t.start()
 
-    # Asosiy thread tirik turadi
     while True:
         time.sleep(60)
 
 if __name__ == "__main__":
-    main()
+    main())
